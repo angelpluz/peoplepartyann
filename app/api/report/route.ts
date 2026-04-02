@@ -1,11 +1,17 @@
-import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
+
+const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 function validateReport(data: {
   name: string;
@@ -20,16 +26,20 @@ function validateReport(data: {
   return null;
 }
 
-async function saveImage(file: File) {
+async function fileToDataUrl(file: File) {
   if (!file || file.size === 0) return null;
-  const extension = path.extname(file.name || "").toLowerCase() || ".jpg";
-  const filename = `${Date.now()}-${randomUUID()}${extension}`;
-  const outputDir = path.join(process.cwd(), "public", "uploads", "reports");
-  const outputPath = path.join(outputDir, filename);
-  await mkdir(outputDir, { recursive: true });
+
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error("รองรับเฉพาะไฟล์ภาพ JPG, PNG, WEBP, GIF และ AVIF");
+  }
+
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error("ไฟล์ภาพต้องมีขนาดไม่เกิน 2MB");
+  }
+
   const arrayBuffer = await file.arrayBuffer();
-  await writeFile(outputPath, Buffer.from(arrayBuffer));
-  return `/uploads/reports/${filename}`;
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  return `data:${file.type};base64,${base64}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -49,8 +59,9 @@ export async function POST(req: NextRequest) {
       message = String(formData.get("message") || "").trim();
       location = String(formData.get("location") || "").trim();
       const imageFile = formData.get("image");
+
       if (imageFile instanceof File && imageFile.size > 0) {
-        imageUrl = await saveImage(imageFile);
+        imageUrl = await fileToDataUrl(imageFile);
       }
     } else {
       const body = await req.json();
@@ -69,10 +80,20 @@ export async function POST(req: NextRequest) {
     const report = await prisma.report.create({
       data: { name, phone, message, location, imageUrl },
     });
+
     return NextResponse.json(report, { status: 201 });
   } catch (error) {
     console.error("create report error:", error);
-    return NextResponse.json({ error: "ไม่สามารถส่งเรื่องร้องเรียนได้" }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "ไม่สามารถส่งเรื่องร้องเรียนได้",
+      },
+      { status: error instanceof Error ? 400 : 500 },
+    );
   }
 }
 

@@ -1,7 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
 
 type NewsDetailPageProps = {
   params: {
@@ -9,10 +8,43 @@ type NewsDetailPageProps = {
   };
 };
 
+type NewsItem = {
+  id: number;
+  title: string;
+  content: string;
+  imageUrl: string | null;
+  createdAt: string;
+};
+
+function getRequestOrigin() {
+  const requestHeaders = headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+
+  if (!host) {
+    throw new Error("Missing request host");
+  }
+
+  const protocol =
+    requestHeaders.get("x-forwarded-proto") ??
+    (host.includes("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+
+  return `${protocol}://${host}`;
+}
+
 async function getNewsById(id: number) {
-  return prisma.news.findUnique({
-    where: { id },
+  const response = await fetch(`${getRequestOrigin()}/api/news/${id}`, {
+    cache: "no-store",
   });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error("Unable to load news item");
+  }
+
+  return (await response.json()) as NewsItem;
 }
 
 export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
@@ -37,8 +69,8 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
         </p>
 
         {news.imageUrl && (
-          <div className="relative mt-6 h-60 overflow-hidden rounded-[2rem] bg-slate-100 sm:h-96">
-            <Image src={news.imageUrl} alt={news.title} fill className="object-cover" />
+          <div className="mt-6 overflow-hidden rounded-[2rem] bg-slate-100">
+            <img src={news.imageUrl} alt={news.title} className="h-auto max-h-[32rem] w-full object-cover" />
           </div>
         )}
 

@@ -13,7 +13,7 @@ model Report {
   phone     String
   message   String   @db.Text
   location  String
-  imageUrl  String?
+  imageUrl  String?  @db.Text
   status    String   @default("new")
   createdAt DateTime @default(now())
 }
@@ -22,6 +22,6 @@ model News {
   id        Int      @id @default(autoincrement())
   title     String
   content   String   @db.Text
-  imageUrl  String?
+  imageUrl  String?  @db.Text
   createdAt DateTime @default(now())
 }

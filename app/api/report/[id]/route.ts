@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+
 const ALLOWED_STATUS = new Set(["new", "in-progress", "done"]);
 
 export async function PATCH(

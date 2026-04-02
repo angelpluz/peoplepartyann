@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+
 function validateNews(payload: { title: string; content: string }) {
   if (!payload.title || payload.title.length < 4) {
     return "กรุณากรอกหัวข้อข่าวอย่างน้อย 4 ตัวอักษร";
