@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_noStore as noStore } from "next/cache";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -99,6 +101,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  noStore();
+
   const token = getTokenFromRequest(req);
   if (!token || !verifyAdminToken(token)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

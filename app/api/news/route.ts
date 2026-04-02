@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_noStore as noStore } from "next/cache";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function validateNews(payload: { title: string; content: string }) {
   if (!payload.title || payload.title.length < 4) {
@@ -21,6 +23,8 @@ function ensureAdmin(req: NextRequest) {
 }
 
 export async function GET() {
+  noStore();
+
   try {
     const news = await prisma.news.findMany({ orderBy: { createdAt: "desc" } });
     return NextResponse.json(news);

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_noStore as noStore } from "next/cache";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const ALLOWED_STATUS = new Set(["new", "in-progress", "done"]);
 
@@ -11,6 +13,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  noStore();
+
   const token = getTokenFromRequest(req);
   if (!token || !verifyAdminToken(token)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

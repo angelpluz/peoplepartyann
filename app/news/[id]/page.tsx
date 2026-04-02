@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { unstable_noStore as noStore } from "next/cache";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type NewsDetailPageProps = {
   params: {
@@ -34,6 +36,8 @@ function getRequestOrigin() {
 }
 
 async function getNewsById(id: number) {
+  noStore();
+
   const response = await fetch(`${getRequestOrigin()}/api/news/${id}`, {
     cache: "no-store",
   });
