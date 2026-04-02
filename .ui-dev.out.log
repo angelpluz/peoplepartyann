@@ -1,0 +1,15 @@
+
+> peopleparty@1.0.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 1285ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1799ms (589 modules)
+ GET / 200 in 1913ms
+ ✓ Compiled in 111ms (281 modules)
+[?25h

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640" fill="none">
+  <rect width="640" height="640" rx="48" fill="url(#paint0_linear_1_2)"/>
+  <circle cx="320" cy="225" r="105" fill="#DBEAFE"/>
+  <path d="M145 520C160 410 229 345 320 345C411 345 480 410 495 520" fill="#DBEAFE"/>
+  <text x="320" y="610" text-anchor="middle" fill="#EFF6FF" font-family="Arial, sans-serif" font-size="36" font-weight="700">MP PROFILE</text>
+  <defs>
+    <linearGradient id="paint0_linear_1_2" x1="68" y1="32" x2="560" y2="608" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#1E3A8A"/>
+    </linearGradient>
+  </defs>
+</svg>
