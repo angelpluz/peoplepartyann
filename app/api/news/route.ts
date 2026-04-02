@@ -3,6 +3,7 @@ import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function validateNews(payload: { title: string; content: string }) {
   if (!payload.title || payload.title.length < 4) {

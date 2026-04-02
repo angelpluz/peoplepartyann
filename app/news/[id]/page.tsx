@@ -2,6 +2,8 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 type NewsDetailPageProps = {
   params: {
     id: string;
