@@ -16,6 +16,12 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
+type GpsCoordinates = {
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+} | null;
+
 function validateReport(data: {
   name: string;
   phone: string;
@@ -27,6 +33,49 @@ function validateReport(data: {
   if (!data.message || data.message.length < 5) return "กรุณากรอกรายละเอียดปัญหา";
   if (!data.location || data.location.length < 2) return "กรุณากรอกสถานที่";
   return null;
+}
+
+function parseNumeric(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function parseGpsCoordinates(data: {
+  gpsLat?: unknown;
+  gpsLng?: unknown;
+  gpsAccuracy?: unknown;
+}): GpsCoordinates {
+  const lat = parseNumeric(data.gpsLat);
+  const lng = parseNumeric(data.gpsLng);
+
+  if (lat === null && lng === null) return null;
+  if (lat === null || lng === null) {
+    throw new Error("พิกัด GPS ไม่ครบถ้วน");
+  }
+
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    throw new Error("พิกัด GPS ไม่ถูกต้อง");
+  }
+
+  const rawAccuracy = parseNumeric(data.gpsAccuracy);
+  const accuracy = rawAccuracy !== null && rawAccuracy >= 0 ? rawAccuracy : null;
+
+  return { lat, lng, accuracy };
+}
+
+function appendGpsToLocation(location: string, gps: GpsCoordinates) {
+  if (!gps) return location;
+
+  const gpsLabel = `GPS: ${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`;
+  if (!location) return gpsLabel;
+  if (location.includes("GPS:")) return location;
+  return `${location} (${gpsLabel})`;
 }
 
 async function fileToDataUrl(file: File) {
@@ -54,6 +103,7 @@ export async function POST(req: NextRequest) {
     let message = "";
     let location = "";
     let imageUrl: string | null = null;
+    let gps: GpsCoordinates = null;
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -61,8 +111,13 @@ export async function POST(req: NextRequest) {
       phone = String(formData.get("phone") || "").trim();
       message = String(formData.get("message") || "").trim();
       location = String(formData.get("location") || "").trim();
-      const imageFile = formData.get("image");
+      gps = parseGpsCoordinates({
+        gpsLat: formData.get("gpsLat"),
+        gpsLng: formData.get("gpsLng"),
+        gpsAccuracy: formData.get("gpsAccuracy"),
+      });
 
+      const imageFile = formData.get("image");
       if (imageFile instanceof File && imageFile.size > 0) {
         imageUrl = await fileToDataUrl(imageFile);
       }
@@ -73,7 +128,14 @@ export async function POST(req: NextRequest) {
       message = String(body?.message || "").trim();
       location = String(body?.location || "").trim();
       imageUrl = body?.imageUrl ? String(body.imageUrl) : null;
+      gps = parseGpsCoordinates({
+        gpsLat: body?.gpsLat,
+        gpsLng: body?.gpsLng,
+        gpsAccuracy: body?.gpsAccuracy,
+      });
     }
+
+    location = appendGpsToLocation(location, gps);
 
     const validationError = validateReport({ name, phone, message, location });
     if (validationError) {
@@ -98,10 +160,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "ไม่สามารถส่งเรื่องร้องเรียนได้",
+        error: error instanceof Error ? error.message : "ไม่สามารถส่งเรื่องร้องเรียนได้",
       },
       { status: error instanceof Error ? 400 : 500 },
     );

@@ -1,6 +1,31 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
+
+type GpsState = {
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+};
+
+function getLocationErrorMessage(error: GeolocationPositionError) {
+  if (error.code === error.PERMISSION_DENIED) {
+    return "กรุณาอนุญาตสิทธิ์ Location เพื่อดึงพิกัด GPS";
+  }
+  if (error.code === error.POSITION_UNAVAILABLE) {
+    return "ไม่สามารถระบุตำแหน่งได้ในตอนนี้";
+  }
+  if (error.code === error.TIMEOUT) {
+    return "หมดเวลาในการค้นหาตำแหน่ง กรุณาลองใหม่";
+  }
+  return "ไม่สามารถอ่านพิกัด GPS ได้";
+}
+
+function formatGpsLabel(gps: GpsState) {
+  const lat = gps.lat.toFixed(6);
+  const lng = gps.lng.toFixed(6);
+  return `GPS: ${lat}, ${lng}`;
+}
 
 export default function ReportPage() {
   const [name, setName] = useState("");
@@ -8,9 +33,64 @@ export default function ReportPage() {
   const [message, setMessage] = useState("");
   const [location, setLocation] = useState("");
   const [image, setImage] = useState<File | null>(null);
+  const [gps, setGps] = useState<GpsState | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+
+  async function handleUseCurrentLocation() {
+    setLocationError("");
+    setError("");
+
+    if (!window.isSecureContext) {
+      setLocationError("การอ่านพิกัด GPS ต้องใช้ผ่าน HTTPS");
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setLocationError("อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง");
+      return;
+    }
+
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextGps: GpsState = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: Number.isFinite(position.coords.accuracy)
+            ? position.coords.accuracy
+            : null,
+        };
+
+        setGps(nextGps);
+        setLocation((current) => {
+          const trimmed = current.trim();
+          const gpsLabel = formatGpsLabel(nextGps);
+          if (!trimmed) return gpsLabel;
+          if (trimmed.includes("GPS:")) return trimmed;
+          return `${trimmed} (${gpsLabel})`;
+        });
+        setLocating(false);
+      },
+      (geoError) => {
+        setLocating(false);
+        setLocationError(getLocationErrorMessage(geoError));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
+    );
+  }
+
+  function handleOpenCamera() {
+    cameraInputRef.current?.click();
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,6 +110,13 @@ export default function ReportPage() {
       formData.set("message", message.trim());
       formData.set("location", location.trim());
       if (image) formData.set("image", image);
+      if (gps) {
+        formData.set("gpsLat", String(gps.lat));
+        formData.set("gpsLng", String(gps.lng));
+        if (gps.accuracy !== null) {
+          formData.set("gpsAccuracy", String(gps.accuracy));
+        }
+      }
 
       const response = await fetch("/api/report", {
         method: "POST",
@@ -47,6 +134,8 @@ export default function ReportPage() {
       setMessage("");
       setLocation("");
       setImage(null);
+      setGps(null);
+      setLocationError("");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "ส่งเรื่องร้องเรียนไม่สำเร็จ");
     } finally {
@@ -71,12 +160,12 @@ export default function ReportPage() {
               <p className="mt-1 text-sm text-slate-600">ชื่อ เบอร์โทร และสถานที่ช่วยให้ทีมงานติดตามได้เร็วขึ้น</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-sm font-semibold text-slate-900">2. แนบภาพประกอบได้</p>
-              <p className="mt-1 text-sm text-slate-600">ช่วยให้เห็นสภาพปัญหาจริงและลดเวลาการประสานงาน</p>
+              <p className="text-sm font-semibold text-slate-900">2. แนบภาพจากกล้องหรือแกลเลอรี</p>
+              <p className="mt-1 text-sm text-slate-600">ภาพประกอบช่วยยืนยันสภาพปัญหาและลดเวลาในการประสานงาน</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-sm font-semibold text-slate-900">3. ทีมงานติดต่อกลับ</p>
-              <p className="mt-1 text-sm text-slate-600">เมื่อรับเรื่องแล้ว จะติดตามผลตามลำดับความเร่งด่วน</p>
+              <p className="text-sm font-semibold text-slate-900">3. ใช้พิกัด GPS จากมือถือ</p>
+              <p className="mt-1 text-sm text-slate-600">กดปุ่มใช้ตำแหน่งปัจจุบันเพื่อแนบพิกัดลงในรายการร้องเรียน</p>
             </div>
           </div>
         </div>
@@ -115,6 +204,23 @@ export default function ReportPage() {
                 placeholder="ชุมชน/หมู่บ้าน/ถนน/จุดสังเกต"
                 required
               />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  className="btn-outline"
+                  disabled={locating}
+                >
+                  {locating ? "กำลังอ่านพิกัด..." : "ใช้ตำแหน่งปัจจุบัน (GPS)"}
+                </button>
+              </div>
+              {gps && (
+                <p className="mt-2 text-xs text-slate-500">
+                  ได้พิกัดแล้ว: {formatGpsLabel(gps)}
+                  {gps.accuracy !== null ? ` (accuracy ${Math.round(gps.accuracy)}m)` : ""}
+                </p>
+              )}
+              {locationError && <p className="mt-2 rounded-xl bg-amber-50 p-2 text-xs text-amber-700">{locationError}</p>}
             </div>
 
             <div>
@@ -130,9 +236,25 @@ export default function ReportPage() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">แนบรูปภาพเพิ่มเติม</label>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="btn-outline" onClick={handleOpenCamera}>
+                  ถ่ายรูปจากกล้องมือถือ
+                </button>
+              </div>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                className="hidden"
+                accept="image/*"
+                capture="environment"
+                onChange={(event) => {
+                  const nextFile = event.target.files?.[0] || null;
+                  setImage(nextFile);
+                }}
+              />
               <input
                 type="file"
-                className="field p-2"
+                className="field mt-2 p-2"
                 accept="image/*"
                 onChange={(event) => {
                   const nextFile = event.target.files?.[0] || null;
