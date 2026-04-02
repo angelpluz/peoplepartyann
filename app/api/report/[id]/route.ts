@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
+import { callBackendApi, readBackendErrorMessage } from "@/lib/backend-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,6 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ) {
   noStore();
-  const { prisma } = await import("@/lib/prisma");
 
   const token = getTokenFromRequest(req);
   if (!token || !verifyAdminToken(token)) {
@@ -32,11 +32,20 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
-    const report = await prisma.report.update({
-      where: { id },
-      data: { status },
+    const result = await callBackendApi(`/reports/${id}`, {
+      method: "PATCH",
+      body: { status },
+      requireApiKey: true,
     });
-    return NextResponse.json(report);
+
+    if (result.status >= 400) {
+      return NextResponse.json(
+        { error: readBackendErrorMessage(result.data, "ไม่สามารถอัปเดตสถานะได้") },
+        { status: result.status },
+      );
+    }
+
+    return NextResponse.json(result.data);
   } catch (error) {
     console.error("update report status error:", error);
     return NextResponse.json({ error: "ไม่สามารถอัปเดตสถานะได้" }, { status: 500 });

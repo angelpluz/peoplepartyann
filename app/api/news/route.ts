@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
+import { callBackendApi, readBackendErrorMessage } from "@/lib/backend-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,11 +24,16 @@ function ensureAdmin(req: NextRequest) {
 
 export async function GET() {
   noStore();
-  const { prisma } = await import("@/lib/prisma");
 
   try {
-    const news = await prisma.news.findMany({ orderBy: { createdAt: "desc" } });
-    return NextResponse.json(news);
+    const result = await callBackendApi("/news");
+    if (result.status >= 400) {
+      return NextResponse.json(
+        { error: readBackendErrorMessage(result.data, "ไม่สามารถดึงข้อมูลข่าวได้") },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json(result.data ?? []);
   } catch (error) {
     console.error("list news error:", error);
     return NextResponse.json({ error: "ไม่สามารถดึงข้อมูลข่าวได้" }, { status: 500 });
@@ -38,7 +44,6 @@ export async function POST(req: NextRequest) {
   if (!ensureAdmin(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { prisma } = await import("@/lib/prisma");
 
   try {
     const body = await req.json();
@@ -51,8 +56,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const newsItem = await prisma.news.create({ data: { title, content, imageUrl } });
-    return NextResponse.json(newsItem, { status: 201 });
+    const result = await callBackendApi("/news", {
+      method: "POST",
+      body: { title, content, imageUrl },
+      requireApiKey: true,
+    });
+
+    if (result.status >= 400) {
+      return NextResponse.json(
+        { error: readBackendErrorMessage(result.data, "ไม่สามารถสร้างข่าวได้") },
+        { status: result.status },
+      );
+    }
+
+    return NextResponse.json(result.data, { status: 201 });
   } catch (error) {
     console.error("create news error:", error);
     return NextResponse.json({ error: "ไม่สามารถสร้างข่าวได้" }, { status: 500 });
@@ -63,7 +80,6 @@ export async function PUT(req: NextRequest) {
   if (!ensureAdmin(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { prisma } = await import("@/lib/prisma");
 
   try {
     const body = await req.json();
@@ -80,11 +96,20 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const newsItem = await prisma.news.update({
-      where: { id },
-      data: { title, content, imageUrl },
+    const result = await callBackendApi(`/news/${id}`, {
+      method: "PUT",
+      body: { title, content, imageUrl },
+      requireApiKey: true,
     });
-    return NextResponse.json(newsItem);
+
+    if (result.status >= 400) {
+      return NextResponse.json(
+        { error: readBackendErrorMessage(result.data, "ไม่สามารถอัปเดตข่าวได้") },
+        { status: result.status },
+      );
+    }
+
+    return NextResponse.json(result.data);
   } catch (error) {
     console.error("update news error:", error);
     return NextResponse.json({ error: "ไม่สามารถอัปเดตข่าวได้" }, { status: 500 });
@@ -95,17 +120,28 @@ export async function DELETE(req: NextRequest) {
   if (!ensureAdmin(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { prisma } = await import("@/lib/prisma");
 
   try {
     const body = await req.json();
     const id = Number(body?.id);
+
     if (!Number.isInteger(id) || id <= 0) {
       return NextResponse.json({ error: "Invalid news id" }, { status: 400 });
     }
 
-    await prisma.news.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    const result = await callBackendApi(`/news/${id}`, {
+      method: "DELETE",
+      requireApiKey: true,
+    });
+
+    if (result.status >= 400) {
+      return NextResponse.json(
+        { error: readBackendErrorMessage(result.data, "ไม่สามารถลบข่าวได้") },
+        { status: result.status },
+      );
+    }
+
+    return NextResponse.json(result.data ?? { ok: true });
   } catch (error) {
     console.error("delete news error:", error);
     return NextResponse.json({ error: "ไม่สามารถลบข่าวได้" }, { status: 500 });
