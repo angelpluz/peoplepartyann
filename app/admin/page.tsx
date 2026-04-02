@@ -1,14 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { getAdminHeaders } from "./admin-auth";
+import type { ReportMapReport } from "./report-map";
 
-type Report = {
-  id: number;
-  name: string;
+const ReportMap = dynamic(() => import("./report-map"), { ssr: false });
+
+type Report = ReportMapReport & {
   phone: string;
-  status: string;
-  createdAt: string;
 };
 
 export default function AdminDashboardPage() {
@@ -80,6 +80,8 @@ export default function AdminDashboardPage() {
               <p className="mt-2 text-sm text-emerald-800/80">รายการที่ดำเนินการเสร็จแล้ว</p>
             </div>
           </div>
+
+          <ReportMap reports={reports} />
 
           <div className="mt-6 rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-4">
