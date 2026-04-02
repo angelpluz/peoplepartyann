@@ -11,6 +11,10 @@ APP_SESSION_SECRET=replace-with-a-long-random-secret
 JWT_SECRET=replace-with-a-long-random-secret
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-a-strong-admin-password
+SITE_GATE_ENABLED=true
+SITE_GATE_USERNAME=admin
+SITE_GATE_PASSWORD=replace-with-a-strong-gate-password
+SITE_GATE_TOKEN=replace-with-a-random-long-token
 ```
 
 Use `vercel.env.example` as the Vercel template, or copy `.env.example` for local setup.
