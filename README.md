@@ -1,11 +1,13 @@
-People Party is a Next.js app backed by Prisma and MySQL.
+People Party is a Next.js app that proxies all `news` and `report` data to a backend API.
 
 ## Environment Variables
 
-Set these variables for local development or in Vercel:
+Set these variables for local development and Vercel:
 
 ```env
-DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/peopleparty
+BACKEND_API_BASE_URL=https://api.alprasoft-corp.com/api/v1
+BACKEND_API_KEY=replace-with-backend-api-key
+APP_SESSION_SECRET=replace-with-a-long-random-secret
 JWT_SECRET=replace-with-a-long-random-secret
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-with-a-strong-admin-password
@@ -21,19 +23,7 @@ Use `vercel.env.example` as the Vercel template, or copy `.env.example` for loca
 npm install
 ```
 
-2. Push the Prisma schema to the database:
-
-```bash
-npm run db:push
-```
-
-3. Optionally seed data:
-
-```bash
-npm run db:seed
-```
-
-4. Start the dev server:
+2. Start the dev server:
 
 ```bash
 npm run dev
@@ -43,4 +33,4 @@ Open `http://localhost:3000`.
 
 ## Deploy on Vercel
 
-Set the same four environment variables in Vercel, then deploy. Prisma will use `DATABASE_URL` from the deployment environment.
+Set the same environment variables in Vercel, then deploy.

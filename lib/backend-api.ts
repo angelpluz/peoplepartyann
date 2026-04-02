@@ -1,3 +1,5 @@
+import "server-only";
+
 type BackendApiOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
@@ -10,19 +12,18 @@ type BackendApiResult<T> = {
 };
 
 function resolveBackendBaseUrl() {
-  const baseUrl = process.env.BACKEND_API_BASE_URL?.trim();
-  if (!baseUrl) {
-    throw new Error("BACKEND_API_BASE_URL is not configured");
-  }
+  const fallbackBaseUrl =
+    process.env.NODE_ENV === "production"
+      ? "https://api.alprasoft-corp.com/api/v1"
+      : "http://127.0.0.1:4272/api/v1";
+  const baseUrl =
+    process.env.BACKEND_API_BASE_URL?.trim() ||
+    fallbackBaseUrl;
   return baseUrl.replace(/\/+$/, "");
 }
 
 function resolveBackendApiKey() {
-  const apiKey = process.env.BACKEND_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("BACKEND_API_KEY is not configured");
-  }
-  return apiKey;
+  return process.env.BACKEND_API_KEY?.trim() || "toon-secret";
 }
 
 async function parseBackendBody(response: Response) {
