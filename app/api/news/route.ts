@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +23,7 @@ function ensureAdmin(req: NextRequest) {
 
 export async function GET() {
   noStore();
+  const { prisma } = await import("@/lib/prisma");
 
   try {
     const news = await prisma.news.findMany({ orderBy: { createdAt: "desc" } });
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
   if (!ensureAdmin(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const { prisma } = await import("@/lib/prisma");
 
   try {
     const body = await req.json();
@@ -62,6 +63,7 @@ export async function PUT(req: NextRequest) {
   if (!ensureAdmin(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const { prisma } = await import("@/lib/prisma");
 
   try {
     const body = await req.json();
@@ -93,6 +95,7 @@ export async function DELETE(req: NextRequest) {
   if (!ensureAdmin(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const { prisma } = await import("@/lib/prisma");
 
   try {
     const body = await req.json();

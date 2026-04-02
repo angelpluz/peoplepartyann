@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
-import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +10,7 @@ export async function GET(
   { params }: { params: { id: string } },
 ) {
   noStore();
+  const { prisma } = await import("@/lib/prisma");
 
   const id = Number(params.id);
   if (!Number.isInteger(id) || id <= 0) {

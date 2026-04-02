@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +45,8 @@ async function fileToDataUrl(file: File) {
 }
 
 export async function POST(req: NextRequest) {
+  const { prisma } = await import("@/lib/prisma");
+
   try {
     const contentType = req.headers.get("content-type") || "";
 
@@ -102,6 +103,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   noStore();
+  const { prisma } = await import("@/lib/prisma");
 
   const token = getTokenFromRequest(req);
   if (!token || !verifyAdminToken(token)) {

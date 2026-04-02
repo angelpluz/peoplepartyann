@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +13,7 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ) {
   noStore();
+  const { prisma } = await import("@/lib/prisma");
 
   const token = getTokenFromRequest(req);
   if (!token || !verifyAdminToken(token)) {
