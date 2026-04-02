@@ -1,12 +1,23 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 type GpsState = {
   lat: number;
   lng: number;
   accuracy: number | null;
 };
+
+const REPORTER_UID_STORAGE_KEY = "peopleparty_reporter_uid";
+
+function createReporterUid() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  const seed = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `uid-${seed}`;
+}
 
 function getLocationErrorMessage(error: GeolocationPositionError) {
   if (error.code === error.PERMISSION_DENIED) {
@@ -32,6 +43,7 @@ export default function ReportPage() {
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
   const [location, setLocation] = useState("");
+  const [reporterUid, setReporterUid] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [gps, setGps] = useState<GpsState | null>(null);
   const [locating, setLocating] = useState(false);
@@ -40,6 +52,22 @@ export default function ReportPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const existing = window.localStorage.getItem(REPORTER_UID_STORAGE_KEY);
+      if (existing && existing.trim()) {
+        setReporterUid(existing.trim());
+        return;
+      }
+
+      const generated = createReporterUid();
+      window.localStorage.setItem(REPORTER_UID_STORAGE_KEY, generated);
+      setReporterUid(generated);
+    } catch {
+      setReporterUid(createReporterUid());
+    }
+  }, []);
 
   async function handleUseCurrentLocation() {
     setLocationError("");
@@ -109,6 +137,7 @@ export default function ReportPage() {
       formData.set("phone", phone.trim());
       formData.set("message", message.trim());
       formData.set("location", location.trim());
+      formData.set("reporterUid", reporterUid || createReporterUid());
       if (image) formData.set("image", image);
       if (gps) {
         formData.set("gpsLat", String(gps.lat));
@@ -241,6 +270,9 @@ export default function ReportPage() {
                   ถ่ายรูปจากกล้องมือถือ
                 </button>
               </div>
+              <p className="mt-2 text-xs text-slate-500">
+                ถ้ารูปมีพิกัด GPS ใน EXIF ระบบจะดึงพิกัดอัตโนมัติ และยังสามารถกดปุ่ม GPS ด้านบนเพื่อยืนยันตำแหน่งปัจจุบันได้
+              </p>
               <input
                 ref={cameraInputRef}
                 type="file"
@@ -263,6 +295,10 @@ export default function ReportPage() {
               />
               {image && <p className="mt-2 text-xs text-slate-500">ไฟล์ที่เลือก: {image.name}</p>}
             </div>
+
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              ระบบจะบันทึก UID ของอุปกรณ์, IP และพิกัด (ถ้ามี) เพื่อช่วยตรวจสอบรายการแจ้ง
+            </p>
 
             {error && <p className="rounded-2xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
             {success && <p className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-700">{success}</p>}

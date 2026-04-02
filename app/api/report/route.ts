@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
+import * as exifr from "exifr";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { callBackendApi, readBackendErrorMessage } from "@/lib/backend-api";
 
@@ -22,6 +23,18 @@ type GpsCoordinates = {
   accuracy: number | null;
 } | null;
 
+type PreparedImageUpload = {
+  imageUrl: string | null;
+  exifGps: GpsCoordinates;
+};
+
+type ReportMeta = {
+  reporterUid: string | null;
+  ipAddress: string | null;
+  gps: GpsCoordinates;
+  gpsSource: "browser" | "exif" | null;
+};
+
 function validateReport(data: {
   name: string;
   phone: string;
@@ -43,6 +56,32 @@ function parseNumeric(value: unknown) {
     const parsed = Number(trimmed);
     return Number.isFinite(parsed) ? parsed : null;
   }
+  return null;
+}
+
+function parseReporterUid(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length < 8 || trimmed.length > 128) return null;
+  if (!/^[a-zA-Z0-9._:-]+$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function extractClientIp(req: NextRequest) {
+  const candidates = [
+    req.headers.get("x-forwarded-for"),
+    req.headers.get("x-real-ip"),
+    req.headers.get("cf-connecting-ip"),
+    req.headers.get("x-vercel-forwarded-for"),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const first = candidate.split(",")[0]?.trim();
+    if (first) return first.slice(0, 128);
+  }
+
   return null;
 }
 
@@ -78,8 +117,46 @@ function appendGpsToLocation(location: string, gps: GpsCoordinates) {
   return `${location} (${gpsLabel})`;
 }
 
-async function fileToDataUrl(file: File) {
-  if (!file || file.size === 0) return null;
+function appendMetaToMessage(message: string, meta: ReportMeta) {
+  const lines: string[] = [];
+
+  if (meta.reporterUid) lines.push(`[meta] uid=${meta.reporterUid}`);
+  if (meta.ipAddress) lines.push(`[meta] ip=${meta.ipAddress}`);
+  if (meta.gps) {
+    const base = `[meta] gps=${meta.gps.lat.toFixed(6)},${meta.gps.lng.toFixed(6)}`;
+    const withAccuracy =
+      meta.gps.accuracy !== null ? `${base} accuracy=${Math.round(meta.gps.accuracy)}m` : base;
+    const withSource = meta.gpsSource ? `${withAccuracy} source=${meta.gpsSource}` : withAccuracy;
+    lines.push(withSource);
+  }
+
+  if (lines.length === 0) return message;
+  if (message.includes("\n[meta] ")) return message;
+  return `${message}\n\n${lines.join("\n")}`;
+}
+
+async function extractGpsFromExif(arrayBuffer: ArrayBuffer): Promise<GpsCoordinates> {
+  try {
+    const gpsData = (await exifr.gps(arrayBuffer)) as
+      | { latitude?: unknown; longitude?: unknown; lat?: unknown; lng?: unknown }
+      | null;
+
+    const lat = parseNumeric(gpsData?.latitude ?? gpsData?.lat);
+    const lng = parseNumeric(gpsData?.longitude ?? gpsData?.lng);
+
+    if (lat === null || lng === null) return null;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+    return { lat, lng, accuracy: null };
+  } catch {
+    return null;
+  }
+}
+
+async function prepareImageUpload(file: File): Promise<PreparedImageUpload> {
+  if (!file || file.size === 0) {
+    return { imageUrl: null, exifGps: null };
+  }
 
   if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
     throw new Error("รองรับเฉพาะไฟล์ภาพ JPG, PNG, WEBP, GIF และ AVIF");
@@ -90,8 +167,12 @@ async function fileToDataUrl(file: File) {
   }
 
   const arrayBuffer = await file.arrayBuffer();
+  const exifGps = await extractGpsFromExif(arrayBuffer);
   const base64 = Buffer.from(arrayBuffer).toString("base64");
-  return `data:${file.type};base64,${base64}`;
+  return {
+    imageUrl: `data:${file.type};base64,${base64}`,
+    exifGps,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -102,8 +183,12 @@ export async function POST(req: NextRequest) {
     let phone = "";
     let message = "";
     let location = "";
+    let reporterUid: string | null = null;
     let imageUrl: string | null = null;
     let gps: GpsCoordinates = null;
+    let exifGps: GpsCoordinates = null;
+    let gpsSource: "browser" | "exif" | null = null;
+    const ipAddress = extractClientIp(req);
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -111,15 +196,19 @@ export async function POST(req: NextRequest) {
       phone = String(formData.get("phone") || "").trim();
       message = String(formData.get("message") || "").trim();
       location = String(formData.get("location") || "").trim();
+      reporterUid = parseReporterUid(formData.get("reporterUid"));
       gps = parseGpsCoordinates({
         gpsLat: formData.get("gpsLat"),
         gpsLng: formData.get("gpsLng"),
         gpsAccuracy: formData.get("gpsAccuracy"),
       });
+      if (gps) gpsSource = "browser";
 
       const imageFile = formData.get("image");
       if (imageFile instanceof File && imageFile.size > 0) {
-        imageUrl = await fileToDataUrl(imageFile);
+        const preparedImage = await prepareImageUpload(imageFile);
+        imageUrl = preparedImage.imageUrl;
+        exifGps = preparedImage.exifGps;
       }
     } else {
       const body = await req.json();
@@ -127,15 +216,28 @@ export async function POST(req: NextRequest) {
       phone = String(body?.phone || "").trim();
       message = String(body?.message || "").trim();
       location = String(body?.location || "").trim();
+      reporterUid = parseReporterUid(body?.reporterUid);
       imageUrl = body?.imageUrl ? String(body.imageUrl) : null;
       gps = parseGpsCoordinates({
         gpsLat: body?.gpsLat,
         gpsLng: body?.gpsLng,
         gpsAccuracy: body?.gpsAccuracy,
       });
+      if (gps) gpsSource = "browser";
+    }
+
+    if (!gps && exifGps) {
+      gps = exifGps;
+      gpsSource = "exif";
     }
 
     location = appendGpsToLocation(location, gps);
+    message = appendMetaToMessage(message, {
+      reporterUid,
+      ipAddress,
+      gps,
+      gpsSource,
+    });
 
     const validationError = validateReport({ name, phone, message, location });
     if (validationError) {
