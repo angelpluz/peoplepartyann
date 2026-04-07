@@ -10,6 +10,7 @@ export type ReportMapReport = {
   name: string;
   message: string;
   location: string;
+  imageUrl: string | null;
   status: string;
   createdAt: string;
 };
@@ -19,6 +20,7 @@ type Pin = {
   name: string;
   status: string;
   createdAt: string;
+  imageUrl: string | null;
   lat: number;
   lng: number;
   source: "meta" | "location";
@@ -58,6 +60,7 @@ function extractPin(report: ReportMapReport): Pin | null {
         name: report.name,
         status: report.status,
         createdAt: report.createdAt,
+        imageUrl: report.imageUrl || null,
         lat: coords.lat,
         lng: coords.lng,
         source: "meta",
@@ -74,6 +77,7 @@ function extractPin(report: ReportMapReport): Pin | null {
         name: report.name,
         status: report.status,
         createdAt: report.createdAt,
+        imageUrl: report.imageUrl || null,
         lat: coords.lat,
         lng: coords.lng,
         source: "location",
@@ -162,6 +166,13 @@ export default function ReportMap({ reports }: { reports: ReportMapReport[] }) {
                   <p className="text-slate-600">
                     {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}
                   </p>
+                  {pin.imageUrl && (
+                    <img
+                      src={pin.imageUrl}
+                      alt={`Report ${pin.id}`}
+                      className="mt-2 h-24 w-full rounded-lg border border-slate-200 object-cover"
+                    />
+                  )}
                 </div>
               </Popup>
             </Marker>
