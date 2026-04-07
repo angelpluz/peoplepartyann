@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 import * as exifr from "exifr";
+import sharp from "sharp";
 import { getTokenFromRequest, verifyAdminToken } from "@/lib/auth";
 import { callBackendApi, readBackendErrorMessage } from "@/lib/backend-api";
 
@@ -8,10 +9,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+const TARGET_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+const MAX_INPUT_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 2000;
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/avif",
   "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/jpg",
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -135,6 +141,67 @@ function appendMetaToMessage(message: string, meta: ReportMeta) {
   return `${message}\n\n${lines.join("\n")}`;
 }
 
+function toDataUrl(buffer: Buffer, mimeType: string) {
+  return `data:${mimeType};base64,${buffer.toString("base64")}`;
+}
+
+function uniqueDescending(values: number[]) {
+  return Array.from(new Set(values.filter((value) => Number.isFinite(value) && value > 0))).sort(
+    (a, b) => b - a,
+  );
+}
+
+async function compressImageToTarget(originalBuffer: Buffer) {
+  const metadata = await sharp(originalBuffer, { failOn: "none" }).metadata();
+  const width = metadata.width || 0;
+  const height = metadata.height || 0;
+  const longestSide = Math.max(width, height, 0);
+
+  const resizeSteps = uniqueDescending([
+    Math.min(MAX_IMAGE_DIMENSION, longestSide || MAX_IMAGE_DIMENSION),
+    1920,
+    1600,
+    1280,
+    1024,
+    840,
+    720,
+    640,
+  ]);
+  const qualitySteps = [82, 74, 66, 58, 50, 42, 34, 28];
+
+  let bestBuffer: Buffer | null = null;
+
+  for (const size of resizeSteps) {
+    for (const quality of qualitySteps) {
+      let pipeline = sharp(originalBuffer, { failOn: "none" }).rotate();
+      if (width > 0 && height > 0) {
+        pipeline = pipeline.resize({
+          width: size,
+          height: size,
+          fit: "inside",
+          withoutEnlargement: true,
+        });
+      }
+
+      const candidateBuffer = await pipeline.webp({ quality, effort: 4 }).toBuffer();
+
+      if (!bestBuffer || candidateBuffer.length < bestBuffer.length) {
+        bestBuffer = candidateBuffer;
+      }
+
+      if (candidateBuffer.length <= TARGET_IMAGE_SIZE_BYTES) {
+        return { buffer: candidateBuffer, mimeType: "image/webp" };
+      }
+    }
+  }
+
+  if (bestBuffer && bestBuffer.length <= TARGET_IMAGE_SIZE_BYTES) {
+    return { buffer: bestBuffer, mimeType: "image/webp" };
+  }
+
+  throw new Error("ไม่สามารถย่อขนาดรูปให้ต่ำกว่า 2MB ได้ กรุณาเลือกรูปขนาดเล็กลง");
+}
+
 async function extractGpsFromExif(arrayBuffer: ArrayBuffer): Promise<GpsCoordinates> {
   try {
     const gpsData = (await exifr.gps(arrayBuffer)) as
@@ -158,19 +225,21 @@ async function prepareImageUpload(file: File): Promise<PreparedImageUpload> {
     return { imageUrl: null, exifGps: null };
   }
 
-  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-    throw new Error("รองรับเฉพาะไฟล์ภาพ JPG, PNG, WEBP, GIF และ AVIF");
+  if (file.type && !ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error("รองรับเฉพาะไฟล์ภาพ JPG, JPEG, PNG, WEBP, GIF, AVIF, HEIC และ HEIF");
   }
 
-  if (file.size > MAX_IMAGE_SIZE_BYTES) {
-    throw new Error("ไฟล์ภาพต้องมีขนาดไม่เกิน 2MB");
+  if (file.size > MAX_INPUT_IMAGE_SIZE_BYTES) {
+    throw new Error("ไฟล์รูปใหญ่เกินไป (สูงสุด 15MB)");
   }
 
   const arrayBuffer = await file.arrayBuffer();
   const exifGps = await extractGpsFromExif(arrayBuffer);
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  const sourceBuffer = Buffer.from(arrayBuffer);
+  const { buffer: optimizedBuffer, mimeType } = await compressImageToTarget(sourceBuffer);
+
   return {
-    imageUrl: `data:${file.type};base64,${base64}`,
+    imageUrl: toDataUrl(optimizedBuffer, mimeType),
     exifGps,
   };
 }
